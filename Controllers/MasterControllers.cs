@@ -23,10 +23,11 @@ public class CustomersController(AppDbContext db) : ControllerBase
         c.SupportEmail, c.EscalationContact, c.Timezone,
         c.BusinessHours, c.MaxTicketsPerMonth, c.Notes);
 
-    private static void ApplyRequest(Customer c, CreateCustomerRequest req)
+    private static void ApplyRequest(Customer c, CreateCustomerRequest req, bool isNew = false)
     {
         c.Name = req.Name; c.AccountCode = req.AccountCode;
-        c.OrganizationId = req.OrganizationId;
+        if (isNew) c.OrganizationId = req.OrganizationId > 0 ? req.OrganizationId : 1;
+        // Never overwrite OrganizationId on update — keep existing value
         c.Industry = req.Industry; c.ContactPerson = req.ContactPerson;
         c.Phone = req.Phone; c.Email = req.Email; c.Website = req.Website;
         c.Gstin = req.Gstin; c.TaxNo = req.TaxNo; c.SlaPlan = req.SlaPlan;
@@ -58,7 +59,7 @@ public class CustomersController(AppDbContext db) : ControllerBase
     public async Task<IActionResult> Create([FromBody] CreateCustomerRequest req)
     {
         var customer = new Customer();
-        ApplyRequest(customer, req);
+        ApplyRequest(customer, req, isNew: true);
         db.Customers.Add(customer);
         await db.SaveChangesAsync();
         return CreatedAtAction(nameof(Get), new { id = customer.Id }, ToDto(customer));
@@ -70,9 +71,16 @@ public class CustomersController(AppDbContext db) : ControllerBase
     {
         var c = await db.Customers.FindAsync(id);
         if (c == null) return NotFound();
-        ApplyRequest(c, req);
-        await db.SaveChangesAsync();
-        return Ok(ToDto(c));
+        try
+        {
+            ApplyRequest(c, req);
+            await db.SaveChangesAsync();
+            return Ok(ToDto(c));
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, new { message = ex.InnerException?.Message ?? ex.Message });
+        }
     }
 }
 
