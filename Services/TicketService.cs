@@ -5,7 +5,7 @@ using PinusTickets.Models;
 
 namespace PinusTickets.Services;
 
-public class TicketService(AppDbContext db)
+public class TicketService(AppDbContext db, EmailService email, IConfiguration cfg)
 {
     // ── Allowed transitions ──────────────────────────────────────────────────
     private static readonly Dictionary<string, string[]> AllowedTransitions = new()
@@ -59,6 +59,38 @@ public class TicketService(AppDbContext db)
         await db.SaveChangesAsync();
 
         await AddHistoryAsync(ticket.Id, creatorId, "created", null, null, "New", null);
+
+        // ── Fire email notifications ─────────────────────────────────────────
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                var creator  = await db.Users.FindAsync(creatorId);
+                var customer = await db.Customers.FindAsync(req.CustomerId);
+                var portal   = cfg["App:BaseUrl"] ?? "https://ticketing.pinussoftware.cloud";
+                var ticketUrl= $"{portal}/tickets/{ticket.Id}";
+                var html     = email.TicketCreatedHtml(
+                    ticket.TicketNo, ticket.Subject, ticket.Priority,
+                    customer?.Name ?? "", creator?.Name ?? "", ticketUrl);
+
+                // Notify all support team members
+                var supportTeam = await db.Users
+                    .Where(u => u.Role == "Admin" || u.Role == "SupportManager" || u.Role == "SupportExecutive")
+                    .Select(u => new { u.Email, u.Name }).ToListAsync();
+                foreach (var s in supportTeam)
+                    await email.SendAsync(s.Email, s.Name,
+                        $"[{ticket.Priority}] New Ticket {ticket.TicketNo}: {ticket.Subject}",
+                        html, "TicketCreated", ticket.Id);
+
+                // Notify creator if customer role
+                if (creator != null && creator.Email != supportTeam.FirstOrDefault()?.Email)
+                    await email.SendAsync(creator.Email, creator.Name,
+                        $"Your ticket {ticket.TicketNo} has been received",
+                        html, "TicketCreated", ticket.Id);
+            }
+            catch { /* email is non-blocking */ }
+        });
+
         return await GetDetailAsync(ticket.Id);
     }
 
@@ -123,6 +155,41 @@ public class TicketService(AppDbContext db)
 
         await AddHistoryAsync(id, actorId, "status_change", "status", old, req.NewStatus, req.Reason);
         await db.SaveChangesAsync();
+
+        // ── Email on key status changes ────────────────────────────────────────
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                var creator  = await db.Users.FindAsync(ticket.CreatedBy);
+                var customer = await db.Customers.FindAsync(ticket.CustomerId);
+                var portal   = cfg["App:BaseUrl"] ?? "https://ticketing.pinussoftware.cloud";
+                var ticketUrl= $"{portal}/tickets/{ticket.Id}";
+
+                if (req.NewStatus == "Resolved" && creator != null)
+                {
+                    var html = email.TicketResolvedHtml(
+                        ticket.TicketNo, ticket.Subject,
+                        customer?.Name ?? creator.Name,
+                        req.Reason ?? "Issue has been resolved.", ticketUrl);
+                    await email.SendAsync(creator.Email, creator.Name,
+                        $"✅ Resolved: {ticket.TicketNo} — {ticket.Subject}",
+                        html, "TicketResolved", ticket.Id);
+                }
+                else if (req.NewStatus is "Closed" or "Reopened" or "Waiting for Customer")
+                {
+                    var html = email.TicketStatusChangedHtml(
+                        ticket.TicketNo, ticket.Subject, old, req.NewStatus,
+                        customer?.Name ?? "", ticketUrl);
+                    if (creator != null)
+                        await email.SendAsync(creator.Email, creator.Name,
+                            $"Ticket {ticket.TicketNo} status: {req.NewStatus}",
+                            html, "StatusChanged", ticket.Id);
+                }
+            }
+            catch { }
+        });
+
         return await GetDetailAsync(id);
     }
 
@@ -139,6 +206,30 @@ public class TicketService(AppDbContext db)
         await AddHistoryAsync(id, actorId, "assigned", "assignee_id",
                               oldAssignee, req.AssigneeId.ToString(), req.Note);
         await db.SaveChangesAsync();
+
+        // ── Email the assigned engineer ───────────────────────────────────────
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                var assignee = await db.Users.FindAsync(req.AssigneeId);
+                var customer = await db.Customers.FindAsync(ticket.CustomerId);
+                if (assignee != null)
+                {
+                    var portal = cfg["App:BaseUrl"] ?? "https://ticketing.pinussoftware.cloud";
+                    var html   = email.TicketAssignedHtml(
+                        ticket.TicketNo, ticket.Subject, ticket.Priority,
+                        customer?.Name ?? "", assignee.Name,
+                        ticket.SlaDueAt?.ToString("dd MMM yyyy HH:mm") ?? "N/A",
+                        $"{portal}/workbench");
+                    await email.SendAsync(assignee.Email, assignee.Name,
+                        $"[Assigned] {ticket.TicketNo}: {ticket.Subject}", html,
+                        "TicketAssigned", ticket.Id);
+                }
+            }
+            catch { }
+        });
+
         return await GetDetailAsync(id);
     }
 

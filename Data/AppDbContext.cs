@@ -16,6 +16,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<TicketHistory>    TicketHistory     => Set<TicketHistory>();
     public DbSet<TimeEntry>        TimeEntries       => Set<TimeEntry>();
     public DbSet<TestResult>       TestResults       => Set<TestResult>();
+    public DbSet<Notification>     Notifications     => Set<Notification>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {

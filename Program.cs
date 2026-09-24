@@ -31,6 +31,7 @@ builder.Services.AddAuthorization();
 
 // ── Services ──────────────────────────────────────────────────────────────────
 builder.Services.AddScoped<AuthService>();
+builder.Services.AddScoped<EmailService>();
 builder.Services.AddScoped<TicketService>();
 
 // ── CORS ──────────────────────────────────────────────────────────────────────
