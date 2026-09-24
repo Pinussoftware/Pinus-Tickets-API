@@ -6,80 +6,79 @@ using PinusTickets.Models;
 
 namespace PinusTickets.Services;
 
-public class EmailService(IConfiguration cfg, AppDbContext db, ILogger<EmailService> log)
+public class EmailService(IConfiguration cfg, IServiceScopeFactory scopeFactory, ILogger<EmailService> log)
 {
-    // ── Send one email ────────────────────────────────────────────────────────
+    // ── Send one email — uses its own fresh DB scope, safe to call from background threads ──
     public async Task SendAsync(string toEmail, string toName, string subject, string htmlBody,
                                 string eventType = "General", int? ticketId = null)
     {
-        var notif = new Notification
-        {
-            EventType   = eventType,
-            RecipientId = 0,
-            Channel     = "Email",
-            Status      = "Pending",
-            TicketId    = ticketId,
-            Subject     = subject,
-            Body        = htmlBody,
-        };
-        db.Notifications.Add(notif);
-        await db.SaveChangesAsync();
-
         var smtpCfg = cfg.GetSection("Smtp");
         bool enabled = smtpCfg.GetValue<bool>("Enabled");
+        string status = "Pending";
+        string? errorMsg = null;
 
         if (!enabled)
         {
             log.LogInformation("[EMAIL DISABLED] To:{To} Subject:{Subject}", toEmail, subject);
-            notif.Status = "Skipped"; notif.SentAt = DateTime.UtcNow;
-            await db.SaveChangesAsync();
-            return;
+            status = "Skipped";
         }
-
-        try
+        else
         {
-            var message = new MimeMessage();
-            message.From.Add(new MailboxAddress(
-                smtpCfg["FromName"] ?? "Pinus Ticket System",
-                smtpCfg["FromEmail"]!));
-            message.To.Add(new MailboxAddress(toName, toEmail));
-            message.Subject = subject;
-            message.Body    = new TextPart("html") { Text = htmlBody };
+            try
+            {
+                var message = new MimeMessage();
+                message.From.Add(new MailboxAddress(
+                    smtpCfg["FromName"] ?? "Pinus Ticket System",
+                    smtpCfg["FromEmail"]!));
+                message.To.Add(new MailboxAddress(toName, toEmail));
+                message.Subject = subject;
+                message.Body    = new TextPart("html") { Text = htmlBody };
 
-            using var client = new SmtpClient();
-            await client.ConnectAsync(
-                smtpCfg["Host"]!,
-                smtpCfg.GetValue<int>("Port"),
-                smtpCfg.GetValue<bool>("UseSsl") ? SecureSocketOptions.SslOnConnect : SecureSocketOptions.StartTls);
-            await client.AuthenticateAsync(smtpCfg["Username"]!, smtpCfg["Password"]!);
-            await client.SendAsync(message);
-            await client.DisconnectAsync(true);
+                using var client = new SmtpClient();
+                await client.ConnectAsync(
+                    smtpCfg["Host"]!,
+                    smtpCfg.GetValue<int>("Port"),
+                    smtpCfg.GetValue<bool>("UseSsl")
+                        ? SecureSocketOptions.SslOnConnect
+                        : SecureSocketOptions.StartTls);
+                await client.AuthenticateAsync(smtpCfg["Username"]!, smtpCfg["Password"]!);
+                await client.SendAsync(message);
+                await client.DisconnectAsync(true);
 
-            notif.Status = "Sent"; notif.SentAt = DateTime.UtcNow;
-            log.LogInformation("[EMAIL SENT] To:{To} Subject:{Subject}", toEmail, subject);
+                status = "Sent";
+                log.LogInformation("[EMAIL SENT] To:{To} Subject:{Subject}", toEmail, subject);
+            }
+            catch (Exception ex)
+            {
+                status   = "Failed";
+                errorMsg = ex.Message;
+                log.LogError(ex, "[EMAIL FAILED] To:{To}", toEmail);
+            }
         }
-        catch (Exception ex)
+
+        // Always log the notification — fresh scope, never shares DbContext with caller
+        using var scope = scopeFactory.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        db.Notifications.Add(new Notification
         {
-            notif.Status       = "Failed";
-            notif.ErrorMessage = ex.Message;
-            log.LogError(ex, "[EMAIL FAILED] To:{To}", toEmail);
-        }
-
+            EventType    = eventType,
+            RecipientId  = 0,
+            Channel      = "Email",
+            Status       = status,
+            TicketId     = ticketId,
+            Subject      = subject,
+            Body         = htmlBody,
+            SentAt       = status == "Sent" ? DateTime.UtcNow : null,
+            ErrorMessage = errorMsg,
+            CreatedAt    = DateTime.UtcNow,
+        });
         await db.SaveChangesAsync();
-    }
-
-    // ── Send to multiple recipients ───────────────────────────────────────────
-    public async Task SendToManyAsync(IEnumerable<(string email, string name)> recipients,
-        string subject, string htmlBody, string eventType = "General", int? ticketId = null)
-    {
-        foreach (var (email, name) in recipients)
-            await SendAsync(email, name, subject, htmlBody, eventType, ticketId);
     }
 
     // ── HTML Templates ────────────────────────────────────────────────────────
     public string TicketCreatedHtml(string ticketNo, string subject, string priority,
-        string customer, string creatorName, string portalUrl) => $@"
-{BaseHtml($"New Ticket Created — {ticketNo}", $@"
+        string customer, string creatorName, string portalUrl) =>
+        BaseHtml($"New Ticket Created — {ticketNo}", $@"
   <div class='header'>📋 New Support Ticket Created</div>
   <div class='body'>
     <p>Hello,</p>
@@ -88,11 +87,11 @@ public class EmailService(IConfiguration cfg, AppDbContext db, ILogger<EmailServ
     <p><strong>Raised by:</strong> {creatorName}</p>
     <a href='{portalUrl}' class='btn'>View Ticket</a>
     <p class='footer-note'>Please review and assign this ticket at the earliest.</p>
-  </div>")}";
+  </div>");
 
     public string TicketAssignedHtml(string ticketNo, string subject, string priority,
-        string customer, string assigneeName, string slaDue, string portalUrl) => $@"
-{BaseHtml($"Ticket Assigned to You — {ticketNo}", $@"
+        string customer, string assigneeName, string slaDue, string portalUrl) =>
+        BaseHtml($"Ticket Assigned to You — {ticketNo}", $@"
   <div class='header'>🔧 Ticket Assigned to You</div>
   <div class='body'>
     <p>Hello <strong>{assigneeName}</strong>,</p>
@@ -100,11 +99,11 @@ public class EmailService(IConfiguration cfg, AppDbContext db, ILogger<EmailServ
     {TicketCard(ticketNo, subject, priority, customer)}
     <p><strong>SLA Due:</strong> {slaDue}</p>
     <a href='{portalUrl}' class='btn'>Open My Workbench</a>
-  </div>")}";
+  </div>");
 
     public string TicketStatusChangedHtml(string ticketNo, string subject,
-        string oldStatus, string newStatus, string customerName, string portalUrl) => $@"
-{BaseHtml($"Ticket Status Updated — {ticketNo}", $@"
+        string oldStatus, string newStatus, string customerName, string portalUrl) =>
+        BaseHtml($"Ticket Status Updated — {ticketNo}", $@"
   <div class='header'>🔄 Ticket Status Updated</div>
   <div class='body'>
     <p>Hello <strong>{customerName}</strong>,</p>
@@ -116,11 +115,11 @@ public class EmailService(IConfiguration cfg, AppDbContext db, ILogger<EmailServ
     </div>
     <p><strong>Subject:</strong> {subject}</p>
     <a href='{portalUrl}' class='btn'>Track Your Ticket</a>
-  </div>")}";
+  </div>");
 
     public string TicketResolvedHtml(string ticketNo, string subject,
-        string customerName, string resolution, string portalUrl) => $@"
-{BaseHtml($"Ticket Resolved — {ticketNo}", $@"
+        string customerName, string resolution, string portalUrl) =>
+        BaseHtml($"Ticket Resolved — {ticketNo}", $@"
   <div class='header'>✅ Your Ticket Has Been Resolved</div>
   <div class='body'>
     <p>Hello <strong>{customerName}</strong>,</p>
@@ -129,9 +128,9 @@ public class EmailService(IConfiguration cfg, AppDbContext db, ILogger<EmailServ
     <p><strong>Resolution:</strong> {resolution}</p>
     <a href='{portalUrl}' class='btn'>Confirm Resolution</a>
     <p class='footer-note'>If the issue persists, you can reopen the ticket from the portal.</p>
-  </div>")}";
+  </div>");
 
-    // ── Shared layout ─────────────────────────────────────────────────────────
+    // ── Shared helpers ────────────────────────────────────────────────────────
     private static string TicketCard(string no, string subject, string priority, string customer) => $@"
   <div class='ticket-card'>
     <div class='tc-no'>{no}</div>
@@ -140,12 +139,11 @@ public class EmailService(IConfiguration cfg, AppDbContext db, ILogger<EmailServ
   </div>";
 
     private static string BaseHtml(string title, string content) => $@"
-<!DOCTYPE html><html><head><meta charset='utf-8'>
+<!DOCTYPE html><html><head><meta charset='utf-8'><title>{title}</title>
 <style>
   body  {{ font-family:'Segoe UI',Arial,sans-serif; background:#f1f5f9; margin:0; padding:20px; }}
   .wrap {{ max-width:580px; margin:0 auto; }}
   .logo {{ background:#171a35; padding:20px 28px; border-radius:12px 12px 0 0; }}
-  .logo img {{ height:36px; }}
   .logo-text {{ color:#fff; font-size:18px; font-weight:700; letter-spacing:1px; }}
   .card {{ background:#fff; border-radius:0 0 12px 12px; padding:28px; box-shadow:0 4px 20px rgba(0,0,0,.08); }}
   .header {{ font-size:20px; font-weight:700; color:#171a35; margin-bottom:18px; padding-bottom:14px; border-bottom:2px solid #f1f5f9; }}
@@ -165,14 +163,14 @@ public class EmailService(IConfiguration cfg, AppDbContext db, ILogger<EmailServ
   .status.new {{ background:#dcfce7; color:#15803d; }}
   .arrow {{ font-size:20px; color:#94a3b8; }}
   .footer-note {{ font-size:12px; color:#94a3b8; margin-top:16px; }}
-  .divider {{ border:none; border-top:1px solid #f1f5f9; margin:20px 0; }}
+  hr {{ border:none; border-top:1px solid #f1f5f9; margin:20px 0; }}
   .footer {{ text-align:center; font-size:11px; color:#94a3b8; padding:16px 0 0; }}
 </style></head><body>
 <div class='wrap'>
   <div class='logo'><span class='logo-text'>🎫 PINUS TICKET SYSTEM</span></div>
   <div class='card'>
     {content}
-    <hr class='divider'/>
+    <hr/>
     <div class='footer'>
       Pinus Software Solutions Pvt. Ltd. &bull; ticketing.pinussoftware.cloud<br/>
       This is an automated notification. Please do not reply to this email.

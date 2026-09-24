@@ -15,6 +15,14 @@ public class Application
     [Column("status")] public string Status { get; set; } = "active";
     [Column("created_at")] public DateTime? CreatedAt { get; set; } = DateTime.UtcNow;
 
+    // Extended fields
+    [Column("description")]        public string? Description     { get; set; }
+    [Column("database_tech")]      public string? DatabaseTech    { get; set; }
+    [Column("deployment_type")]    public string? DeploymentType  { get; set; }
+    [Column("support_team")]       public string? SupportTeam     { get; set; }
+    [Column("sla_priority")]       public string? SlaPriority     { get; set; } = "Standard";
+    [Column("notes")]              public string? Notes           { get; set; }
+
     public Customer? Customer { get; set; }
     public ICollection<Ticket> Tickets { get; set; } = [];
 }

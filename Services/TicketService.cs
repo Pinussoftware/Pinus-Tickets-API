@@ -60,35 +60,37 @@ public class TicketService(AppDbContext db, EmailService email, IConfiguration c
 
         await AddHistoryAsync(ticket.Id, creatorId, "created", null, null, "New", null);
 
-        // ── Fire email notifications ─────────────────────────────────────────
+        // ── Fire email notifications — pre-fetch data BEFORE Task.Run to avoid DbContext threading ──
+        var creator  = await db.Users.FindAsync(creatorId);
+        var customer = await db.Customers.FindAsync(req.CustomerId);
+        var supportTeam = await db.Users
+            .Where(u => u.Role == "Admin" || u.Role == "SupportManager" || u.Role == "SupportExecutive")
+            .Select(u => new { u.Email, u.Name }).ToListAsync();
+
+        var ticketNo  = ticket.TicketNo;
+        var subject2  = ticket.Subject;
+        var priority  = ticket.Priority;
+        var ticketId  = ticket.Id;
+        var custName  = customer?.Name ?? "";
+        var crName    = creator?.Name  ?? "";
+        var portal    = cfg["App:BaseUrl"] ?? "https://ticketing.pinussoftware.cloud";
+        var ticketUrl = $"{portal}/tickets/{ticketId}";
+
         _ = Task.Run(async () =>
         {
             try
             {
-                var creator  = await db.Users.FindAsync(creatorId);
-                var customer = await db.Customers.FindAsync(req.CustomerId);
-                var portal   = cfg["App:BaseUrl"] ?? "https://ticketing.pinussoftware.cloud";
-                var ticketUrl= $"{portal}/tickets/{ticket.Id}";
-                var html     = email.TicketCreatedHtml(
-                    ticket.TicketNo, ticket.Subject, ticket.Priority,
-                    customer?.Name ?? "", creator?.Name ?? "", ticketUrl);
-
-                // Notify all support team members
-                var supportTeam = await db.Users
-                    .Where(u => u.Role == "Admin" || u.Role == "SupportManager" || u.Role == "SupportExecutive")
-                    .Select(u => new { u.Email, u.Name }).ToListAsync();
+                var html = email.TicketCreatedHtml(ticketNo, subject2, priority, custName, crName, ticketUrl);
                 foreach (var s in supportTeam)
                     await email.SendAsync(s.Email, s.Name,
-                        $"[{ticket.Priority}] New Ticket {ticket.TicketNo}: {ticket.Subject}",
-                        html, "TicketCreated", ticket.Id);
-
-                // Notify creator if customer role
-                if (creator != null && creator.Email != supportTeam.FirstOrDefault()?.Email)
+                        $"[{priority}] New Ticket {ticketNo}: {subject2}",
+                        html, "TicketCreated", ticketId);
+                if (creator != null && !supportTeam.Any(s => s.Email == creator.Email))
                     await email.SendAsync(creator.Email, creator.Name,
-                        $"Your ticket {ticket.TicketNo} has been received",
-                        html, "TicketCreated", ticket.Id);
+                        $"Your ticket {ticketNo} has been received",
+                        html, "TicketCreated", ticketId);
             }
-            catch { /* email is non-blocking */ }
+            catch { }
         });
 
         return await GetDetailAsync(ticket.Id);
@@ -156,35 +158,34 @@ public class TicketService(AppDbContext db, EmailService email, IConfiguration c
         await AddHistoryAsync(id, actorId, "status_change", "status", old, req.NewStatus, req.Reason);
         await db.SaveChangesAsync();
 
-        // ── Email on key status changes ────────────────────────────────────────
+        // ── Pre-fetch before background task ──────────────────────────────────
+        var creator2  = await db.Users.FindAsync(ticket.CreatedBy);
+        var customer2 = await db.Customers.FindAsync(ticket.CustomerId);
+        var portal2   = cfg["App:BaseUrl"] ?? "https://ticketing.pinussoftware.cloud";
+        var tUrl2     = $"{portal2}/tickets/{ticket.Id}";
+        var tNo2 = ticket.TicketNo; var tSubj2 = ticket.Subject;
+        var oldS = old; var newS = req.NewStatus; var reason2 = req.Reason;
+        var tId2 = ticket.Id;
+
         _ = Task.Run(async () =>
         {
             try
             {
-                var creator  = await db.Users.FindAsync(ticket.CreatedBy);
-                var customer = await db.Customers.FindAsync(ticket.CustomerId);
-                var portal   = cfg["App:BaseUrl"] ?? "https://ticketing.pinussoftware.cloud";
-                var ticketUrl= $"{portal}/tickets/{ticket.Id}";
-
-                if (req.NewStatus == "Resolved" && creator != null)
+                if (newS == "Resolved" && creator2 != null)
                 {
-                    var html = email.TicketResolvedHtml(
-                        ticket.TicketNo, ticket.Subject,
-                        customer?.Name ?? creator.Name,
-                        req.Reason ?? "Issue has been resolved.", ticketUrl);
-                    await email.SendAsync(creator.Email, creator.Name,
-                        $"✅ Resolved: {ticket.TicketNo} — {ticket.Subject}",
-                        html, "TicketResolved", ticket.Id);
+                    var html = email.TicketResolvedHtml(tNo2, tSubj2,
+                        customer2?.Name ?? creator2.Name,
+                        reason2 ?? "Issue has been resolved.", tUrl2);
+                    await email.SendAsync(creator2.Email, creator2.Name,
+                        $"✅ Resolved: {tNo2} — {tSubj2}", html, "TicketResolved", tId2);
                 }
-                else if (req.NewStatus is "Closed" or "Reopened" or "Waiting for Customer")
+                else if (newS is "Closed" or "Reopened" or "Waiting for Customer")
                 {
-                    var html = email.TicketStatusChangedHtml(
-                        ticket.TicketNo, ticket.Subject, old, req.NewStatus,
-                        customer?.Name ?? "", ticketUrl);
-                    if (creator != null)
-                        await email.SendAsync(creator.Email, creator.Name,
-                            $"Ticket {ticket.TicketNo} status: {req.NewStatus}",
-                            html, "StatusChanged", ticket.Id);
+                    var html = email.TicketStatusChangedHtml(tNo2, tSubj2, oldS, newS,
+                        customer2?.Name ?? "", tUrl2);
+                    if (creator2 != null)
+                        await email.SendAsync(creator2.Email, creator2.Name,
+                            $"Ticket {tNo2} status: {newS}", html, "StatusChanged", tId2);
                 }
             }
             catch { }
@@ -207,24 +208,25 @@ public class TicketService(AppDbContext db, EmailService email, IConfiguration c
                               oldAssignee, req.AssigneeId.ToString(), req.Note);
         await db.SaveChangesAsync();
 
-        // ── Email the assigned engineer ───────────────────────────────────────
+        // ── Pre-fetch before background task ──────────────────────────────────
+        var assignee3 = await db.Users.FindAsync(req.AssigneeId);
+        var customer3 = await db.Customers.FindAsync(ticket.CustomerId);
+        var portal3   = cfg["App:BaseUrl"] ?? "https://ticketing.pinussoftware.cloud";
+        var tNo3 = ticket.TicketNo; var tSubj3 = ticket.Subject;
+        var tPri3 = ticket.Priority; var tSla3 = ticket.SlaDueAt; var tId3 = ticket.Id;
+
         _ = Task.Run(async () =>
         {
             try
             {
-                var assignee = await db.Users.FindAsync(req.AssigneeId);
-                var customer = await db.Customers.FindAsync(ticket.CustomerId);
-                if (assignee != null)
+                if (assignee3 != null)
                 {
-                    var portal = cfg["App:BaseUrl"] ?? "https://ticketing.pinussoftware.cloud";
-                    var html   = email.TicketAssignedHtml(
-                        ticket.TicketNo, ticket.Subject, ticket.Priority,
-                        customer?.Name ?? "", assignee.Name,
-                        ticket.SlaDueAt?.ToString("dd MMM yyyy HH:mm") ?? "N/A",
-                        $"{portal}/workbench");
-                    await email.SendAsync(assignee.Email, assignee.Name,
-                        $"[Assigned] {ticket.TicketNo}: {ticket.Subject}", html,
-                        "TicketAssigned", ticket.Id);
+                    var html = email.TicketAssignedHtml(
+                        tNo3, tSubj3, tPri3, customer3?.Name ?? "", assignee3.Name,
+                        tSla3?.ToString("dd MMM yyyy HH:mm") ?? "N/A",
+                        $"{portal3}/workbench");
+                    await email.SendAsync(assignee3.Email, assignee3.Name,
+                        $"[Assigned] {tNo3}: {tSubj3}", html, "TicketAssigned", tId3);
                 }
             }
             catch { }

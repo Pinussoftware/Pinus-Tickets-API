@@ -6,20 +6,51 @@ public record LoginResponse(int UserId, string Name, string Email, string Role,
                             string OrganizationName, string Token);
 
 // ── Users ────────────────────────────────────────────────────────────────────
-public record UserDto(int Id, string Name, string Email, string Role, string Status);
+public record UserDto(int Id, string Name, string Email, string Role, string Status, string? Phone, DateTime? CreatedAt);
 public record CreateUserRequest(string Name, string Email, string Password,
                                 string Role, int OrganizationId, string? Phone);
+public record UpdateUserRequest(string? Name, string? Role, string? Phone, string? Status, string? Password);
 
 // ── Customers ────────────────────────────────────────────────────────────────
-public record CustomerDto(int Id, string Name, string AccountCode, string Status,
-                          int OrganizationId);
-public record CreateCustomerRequest(string Name, string AccountCode, int OrganizationId);
+public record CustomerDto(
+    int Id, string Name, string AccountCode, string Status, int OrganizationId,
+    string? Industry, string? ContactPerson, string? Phone, string? Email, string? Website,
+    string? Gstin, string? TaxNo, string? SlaPlan, string? SinceYear,
+    string? Address, string? City, string? State, string? Pincode, string? Country,
+    string? BankName, string? BranchName, string? AccountName, string? AccountNumber,
+    string? AccountType, string? IfscCode, string? SwiftCode, string? MicrCode, string? UpiId,
+    string? SupportEmail, string? EscalationContact, string? Timezone,
+    string? BusinessHours, int? MaxTicketsPerMonth, string? Notes);
+
+public record CreateCustomerRequest(
+    string Name, string AccountCode, int OrganizationId,
+    string? Industry, string? ContactPerson, string? Phone, string? Email, string? Website,
+    string? Gstin, string? TaxNo, string? SlaPlan, string? Status, string? SinceYear,
+    string? Address, string? City, string? State, string? Pincode, string? Country,
+    string? BankName, string? BranchName, string? AccountName, string? AccountNumber,
+    string? AccountType, string? IfscCode, string? SwiftCode, string? MicrCode, string? UpiId,
+    string? SupportEmail, string? EscalationContact, string? Timezone,
+    string? BusinessHours, int? MaxTicketsPerMonth, string? Notes);
 
 // ── Applications ─────────────────────────────────────────────────────────────
-public record ApplicationDto(int Id, string Name, string? Version,
-                             string? Technology, string Status, int CustomerId);
+public record ApplicationDto(int Id, string Name, string? Version, string? Technology,
+    string Status, int CustomerId, string? CustomerName,
+    string? Description, string? DatabaseTech, string? DeploymentType,
+    string? SupportTeam, string? SlaPriority, string? Notes);
 public record CreateApplicationRequest(string Name, int CustomerId,
-                                       string? Version, string? Technology);
+    string? Version, string? Technology, string? Status,
+    string? Description, string? DatabaseTech, string? DeploymentType,
+    string? SupportTeam, string? SlaPriority, string? Notes);
+
+// ── Contracts ─────────────────────────────────────────────────────────────────
+public record ContractDto(int Id, int CustomerId, string CustomerName,
+    string ContractNumber, string PlanName, DateTime StartDate, DateTime EndDate,
+    string Status, int ResponseHoursCritical, int ResponseHoursHigh,
+    int ResponseHoursMedium, int ResponseHoursLow, DateTime? CreatedAt);
+public record CreateContractRequest(int CustomerId, string ContractNumber,
+    string PlanName, DateTime StartDate, DateTime EndDate, string? Status,
+    int ResponseHoursCritical, int ResponseHoursHigh,
+    int ResponseHoursMedium, int ResponseHoursLow);
 
 // ── Tickets ──────────────────────────────────────────────────────────────────
 public record TicketListItem(int Id, string TicketNo, string Subject,
