@@ -7,6 +7,7 @@ using PinusTickets.Models;
 
 namespace PinusTickets.Controllers;
 
+// ── Customers ─────────────────────────────────────────────────────────────────
 [ApiController]
 [Route("api/v1/customers")]
 [Authorize]
@@ -41,22 +42,48 @@ public class CustomersController(AppDbContext db) : ControllerBase
             new CustomerDto(customer.Id, customer.Name, customer.AccountCode,
                             customer.Status, customer.OrganizationId));
     }
+
+    [HttpPatch("{id:int}")]
+    [Authorize(Roles = "Admin,SupportManager")]
+    public async Task<IActionResult> Update(int id, [FromBody] CreateCustomerRequest req)
+    {
+        var c = await db.Customers.FindAsync(id);
+        if (c == null) return NotFound();
+        c.Name = req.Name; c.AccountCode = req.AccountCode;
+        await db.SaveChangesAsync();
+        return Ok(new CustomerDto(c.Id, c.Name, c.AccountCode, c.Status, c.OrganizationId));
+    }
 }
 
+// ── Applications ──────────────────────────────────────────────────────────────
 [ApiController]
 [Route("api/v1/applications")]
 [Authorize]
 public class ApplicationsController(AppDbContext db) : ControllerBase
 {
     [HttpGet]
-    public async Task<IActionResult> List([FromQuery] int? customerId)
+    public async Task<IActionResult> List([FromQuery] int? customerId, [FromQuery] string? status)
     {
-        var q = db.Applications.AsQueryable();
+        var q = db.Applications.Include(a => a.Customer).AsQueryable();
         if (customerId.HasValue) q = q.Where(a => a.CustomerId == customerId);
-        return Ok(await q
-            .Select(a => new ApplicationDto(a.Id, a.Name, a.Version,
-                                            a.Technology, a.Status, a.CustomerId))
+        if (!string.IsNullOrEmpty(status)) q = q.Where(a => a.Status == status);
+        return Ok(await q.OrderBy(a => a.Customer!.Name).ThenBy(a => a.Name)
+            .Select(a => new
+            {
+                a.Id, a.Name, a.Version, a.Technology, a.Status, a.CustomerId,
+                CustomerName = a.Customer!.Name,
+                a.OwnerUserId
+            })
             .ToListAsync());
+    }
+
+    [HttpGet("{id:int}")]
+    public async Task<IActionResult> Get(int id)
+    {
+        var a = await db.Applications.Include(a => a.Customer).FirstOrDefaultAsync(a => a.Id == id);
+        if (a == null) return NotFound();
+        return Ok(new { a.Id, a.Name, a.Version, a.Technology, a.Status,
+                         a.CustomerId, CustomerName = a.Customer?.Name });
     }
 
     [HttpPost]
@@ -70,11 +97,35 @@ public class ApplicationsController(AppDbContext db) : ControllerBase
         };
         db.Applications.Add(app);
         await db.SaveChangesAsync();
-        return Ok(new ApplicationDto(app.Id, app.Name, app.Version,
-                                     app.Technology, app.Status, app.CustomerId));
+        var customer = await db.Customers.FindAsync(req.CustomerId);
+        return Ok(new { app.Id, app.Name, app.Version, app.Technology,
+                         app.Status, app.CustomerId, CustomerName = customer?.Name });
+    }
+
+    [HttpPatch("{id:int}")]
+    [Authorize(Roles = "Admin,SupportManager")]
+    public async Task<IActionResult> Update(int id, [FromBody] CreateApplicationRequest req)
+    {
+        var app = await db.Applications.FindAsync(id);
+        if (app == null) return NotFound();
+        app.Name = req.Name; app.Version = req.Version; app.Technology = req.Technology;
+        await db.SaveChangesAsync();
+        return Ok(new { app.Id, app.Name, app.Version, app.Technology, app.Status, app.CustomerId });
+    }
+
+    [HttpPatch("{id:int}/status")]
+    [Authorize(Roles = "Admin,SupportManager")]
+    public async Task<IActionResult> SetStatus(int id, [FromBody] SetStatusRequest req)
+    {
+        var app = await db.Applications.FindAsync(id);
+        if (app == null) return NotFound();
+        app.Status = req.Status;
+        await db.SaveChangesAsync();
+        return Ok(new { app.Id, app.Status });
     }
 }
 
+// ── Users ─────────────────────────────────────────────────────────────────────
 [ApiController]
 [Route("api/v1/users")]
 [Authorize(Roles = "Admin")]
@@ -91,15 +142,11 @@ public class UsersController(AppDbContext db) : ControllerBase
     {
         if (await db.Users.AnyAsync(u => u.Email == req.Email))
             return Conflict(new { message = "Email already exists" });
-
         var user = new User
         {
-            Name           = req.Name,
-            Email          = req.Email,
-            PasswordHash   = BCrypt.Net.BCrypt.HashPassword(req.Password),
-            Role           = req.Role,
-            OrganizationId = req.OrganizationId,
-            Phone          = req.Phone,
+            Name = req.Name, Email = req.Email,
+            PasswordHash = BCrypt.Net.BCrypt.HashPassword(req.Password),
+            Role = req.Role, OrganizationId = req.OrganizationId, Phone = req.Phone,
         };
         db.Users.Add(user);
         await db.SaveChangesAsync();

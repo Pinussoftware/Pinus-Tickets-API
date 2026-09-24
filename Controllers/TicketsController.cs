@@ -11,21 +11,34 @@ namespace PinusTickets.Controllers;
 [Authorize]
 public class TicketsController(TicketService svc) : ControllerBase
 {
-    private int CurrentUserId =>
-        int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+    private int    CurrentUserId  => int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+    private string CurrentRole    => User.FindFirstValue(ClaimTypes.Role) ?? "";
+    private int    CurrentOrgId   => int.Parse(User.FindFirstValue("org_id") ?? "0");
+    private bool   IsCustomerRole => CurrentRole is "CustomerAdmin" or "CustomerUser";
 
     // GET /api/v1/tickets
     [HttpGet]
     public async Task<IActionResult> List(
         [FromQuery] string? status, [FromQuery] string? priority,
         [FromQuery] int? customerId, [FromQuery] int? assigneeId)
-        => Ok(await svc.GetListAsync(status, priority, customerId, assigneeId));
+    {
+        // Customer roles can ONLY see their own org's tickets
+        int? scopedCustomerId = IsCustomerRole ? CurrentOrgId : customerId;
+        return Ok(await svc.GetListAsync(status, priority, scopedCustomerId, assigneeId));
+    }
 
     // GET /api/v1/tickets/{id}
     [HttpGet("{id:int}")]
     public async Task<IActionResult> Get(int id)
     {
-        try   { return Ok(await svc.GetDetailAsync(id)); }
+        try
+        {
+            var ticket = await svc.GetDetailAsync(id);
+            // Customer roles: block access to other customers' tickets
+            if (IsCustomerRole && ticket.CustomerId != CurrentOrgId)
+                return Forbid();
+            return Ok(ticket);
+        }
         catch (KeyNotFoundException) { return NotFound(); }
     }
 
@@ -33,6 +46,9 @@ public class TicketsController(TicketService svc) : ControllerBase
     [HttpPost]
     public async Task<IActionResult> Create([FromBody] CreateTicketRequest req)
     {
+        // Customer roles can only create tickets for their own org
+        if (IsCustomerRole && req.CustomerId != CurrentOrgId)
+            return Forbid();
         var ticket = await svc.CreateAsync(req, CurrentUserId);
         return CreatedAtAction(nameof(Get), new { id = ticket.Id }, ticket);
     }
@@ -42,7 +58,7 @@ public class TicketsController(TicketService svc) : ControllerBase
     public async Task<IActionResult> Transition(int id, [FromBody] TransitionRequest req)
     {
         try   { return Ok(await svc.TransitionAsync(id, req, CurrentUserId)); }
-        catch (KeyNotFoundException)    { return NotFound(); }
+        catch (KeyNotFoundException)      { return NotFound(); }
         catch (InvalidOperationException ex) { return UnprocessableEntity(new { message = ex.Message }); }
     }
 
@@ -58,7 +74,12 @@ public class TicketsController(TicketService svc) : ControllerBase
     // POST /api/v1/tickets/{id}/comments
     [HttpPost("{id:int}/comments")]
     public async Task<IActionResult> AddComment(int id, [FromBody] AddCommentRequest req)
-        => Ok(await svc.AddCommentAsync(id, req, CurrentUserId));
+    {
+        // Customer roles: block internal notes
+        if (IsCustomerRole && req.Visibility == "internal")
+            return Forbid();
+        return Ok(await svc.AddCommentAsync(id, req, CurrentUserId));
+    }
 
     // POST /api/v1/tickets/{id}/time-entries
     [HttpPost("{id:int}/time-entries")]
@@ -75,5 +96,9 @@ public class TicketsController(TicketService svc) : ControllerBase
     // GET /api/v1/tickets/dashboard
     [HttpGet("dashboard")]
     public async Task<IActionResult> Dashboard()
-        => Ok(await svc.GetStatsAsync());
+    {
+        // Customer roles: scoped stats for their org only
+        int? scopedCustomerId = IsCustomerRole ? CurrentOrgId : null;
+        return Ok(await svc.GetStatsAsync(scopedCustomerId));
+    }
 }

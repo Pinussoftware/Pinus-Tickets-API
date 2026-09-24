@@ -217,10 +217,13 @@ public class TicketService(AppDbContext db)
     }
 
     // ── Dashboard stats ──────────────────────────────────────────────────────
-    public async Task<DashboardStats> GetStatsAsync()
+    public async Task<DashboardStats> GetStatsAsync(int? scopedCustomerId = null)
     {
         var now  = DateTime.UtcNow;
-        var open = await db.Tickets.Where(t => t.Status != "Closed").ToListAsync();
+        var query = db.Tickets.Where(t => t.Status != "Closed");
+        if (scopedCustomerId.HasValue)
+            query = query.Where(t => t.CustomerId == scopedCustomerId.Value);
+        var open = await query.ToListAsync();
 
         var resolvedTickets = await db.Tickets
             .Where(t => t.ResolvedAt != null && t.CreatedAt != null)

@@ -72,6 +72,8 @@ public record TestResultDto(int Id, string Result, string? Environment,
 public record AddTestResultRequest(string Result, string? Environment,
                                    string? Notes, string? EvidencePath);
 
+public record SetStatusRequest(string Status);
+
 // ── Dashboard ────────────────────────────────────────────────────────────────
 public record DashboardStats(int OpenTickets, int UnassignedTickets,
     int CriticalHighTickets, int SlaAtRisk, int OverdueTickets,
