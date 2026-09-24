@@ -1,0 +1,79 @@
+using System.Security.Claims;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+using PinusTickets.DTOs;
+using PinusTickets.Services;
+
+namespace PinusTickets.Controllers;
+
+[ApiController]
+[Route("api/v1/tickets")]
+[Authorize]
+public class TicketsController(TicketService svc) : ControllerBase
+{
+    private int CurrentUserId =>
+        int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+
+    // GET /api/v1/tickets
+    [HttpGet]
+    public async Task<IActionResult> List(
+        [FromQuery] string? status, [FromQuery] string? priority,
+        [FromQuery] int? customerId, [FromQuery] int? assigneeId)
+        => Ok(await svc.GetListAsync(status, priority, customerId, assigneeId));
+
+    // GET /api/v1/tickets/{id}
+    [HttpGet("{id:int}")]
+    public async Task<IActionResult> Get(int id)
+    {
+        try   { return Ok(await svc.GetDetailAsync(id)); }
+        catch (KeyNotFoundException) { return NotFound(); }
+    }
+
+    // POST /api/v1/tickets
+    [HttpPost]
+    public async Task<IActionResult> Create([FromBody] CreateTicketRequest req)
+    {
+        var ticket = await svc.CreateAsync(req, CurrentUserId);
+        return CreatedAtAction(nameof(Get), new { id = ticket.Id }, ticket);
+    }
+
+    // POST /api/v1/tickets/{id}/transition
+    [HttpPost("{id:int}/transition")]
+    public async Task<IActionResult> Transition(int id, [FromBody] TransitionRequest req)
+    {
+        try   { return Ok(await svc.TransitionAsync(id, req, CurrentUserId)); }
+        catch (KeyNotFoundException)    { return NotFound(); }
+        catch (InvalidOperationException ex) { return UnprocessableEntity(new { message = ex.Message }); }
+    }
+
+    // POST /api/v1/tickets/{id}/assign
+    [HttpPost("{id:int}/assign")]
+    [Authorize(Roles = "Admin,SupportManager,SupportExecutive")]
+    public async Task<IActionResult> Assign(int id, [FromBody] AssignRequest req)
+    {
+        try   { return Ok(await svc.AssignAsync(id, req, CurrentUserId)); }
+        catch (KeyNotFoundException) { return NotFound(); }
+    }
+
+    // POST /api/v1/tickets/{id}/comments
+    [HttpPost("{id:int}/comments")]
+    public async Task<IActionResult> AddComment(int id, [FromBody] AddCommentRequest req)
+        => Ok(await svc.AddCommentAsync(id, req, CurrentUserId));
+
+    // POST /api/v1/tickets/{id}/time-entries
+    [HttpPost("{id:int}/time-entries")]
+    [Authorize(Roles = "Admin,Developer,SupportExecutive")]
+    public async Task<IActionResult> AddTimeEntry(int id, [FromBody] AddTimeEntryRequest req)
+        => Ok(await svc.AddTimeEntryAsync(id, req, CurrentUserId));
+
+    // POST /api/v1/tickets/{id}/test-results
+    [HttpPost("{id:int}/test-results")]
+    [Authorize(Roles = "Admin,QA")]
+    public async Task<IActionResult> AddTestResult(int id, [FromBody] AddTestResultRequest req)
+        => Ok(await svc.AddTestResultAsync(id, req, CurrentUserId));
+
+    // GET /api/v1/tickets/dashboard
+    [HttpGet("dashboard")]
+    public async Task<IActionResult> Dashboard()
+        => Ok(await svc.GetStatsAsync());
+}

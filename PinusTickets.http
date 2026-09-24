@@ -1,0 +1,6 @@
+@PinusTickets_HostAddress = http://localhost:5278
+
+GET {{PinusTickets_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
