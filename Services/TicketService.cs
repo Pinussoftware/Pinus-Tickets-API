@@ -76,19 +76,35 @@ public class TicketService(AppDbContext db, EmailService email, IConfiguration c
         var portal    = cfg["App:BaseUrl"] ?? "https://ticketing.pinussoftware.cloud";
         var ticketUrl = $"{portal}/tickets/{ticketId}";
 
+        // Pre-fetch attachment keys before background thread
+        var attachKeys = await db.TicketAttachments
+            .Where(a => a.TicketId == ticketId)
+            .Select(a => a.StorageKey)
+            .ToListAsync();
+
         _ = Task.Run(async () =>
         {
             try
             {
+                // Wait briefly so any attachments uploaded right after ticket creation are included
+                await Task.Delay(TimeSpan.FromSeconds(8));
+
+                // Re-fetch attachment keys after delay using same db (scoped service, safe here)
+                var freshKeys = db.TicketAttachments
+                    .Where(a => a.TicketId == ticketId)
+                    .Select(a => a.StorageKey)
+                    .ToList();
+                var keys = freshKeys.Count > 0 ? freshKeys : attachKeys;
+
                 var html = email.TicketCreatedHtml(ticketNo, subject2, priority, custName, crName, ticketUrl);
                 foreach (var s in supportTeam)
                     await email.SendAsync(s.Email, s.Name,
                         $"[{priority}] New Ticket {ticketNo}: {subject2}",
-                        html, "TicketCreated", ticketId);
+                        html, "TicketCreated", ticketId, keys);
                 if (creator != null && !supportTeam.Any(s => s.Email == creator.Email))
                     await email.SendAsync(creator.Email, creator.Name,
                         $"Your ticket {ticketNo} has been received",
-                        html, "TicketCreated", ticketId);
+                        html, "TicketCreated", ticketId, keys);
             }
             catch { }
         });
@@ -215,6 +231,12 @@ public class TicketService(AppDbContext db, EmailService email, IConfiguration c
         var tNo3 = ticket.TicketNo; var tSubj3 = ticket.Subject;
         var tPri3 = ticket.Priority; var tSla3 = ticket.SlaDueAt; var tId3 = ticket.Id;
 
+        // Pre-fetch attachment keys
+        var attachKeys3 = await db.TicketAttachments
+            .Where(a => a.TicketId == id)
+            .Select(a => a.StorageKey)
+            .ToListAsync();
+
         _ = Task.Run(async () =>
         {
             try
@@ -226,7 +248,7 @@ public class TicketService(AppDbContext db, EmailService email, IConfiguration c
                         tSla3?.ToString("dd MMM yyyy HH:mm") ?? "N/A",
                         $"{portal3}/workbench");
                     await email.SendAsync(assignee3.Email, assignee3.Name,
-                        $"[Assigned] {tNo3}: {tSubj3}", html, "TicketAssigned", tId3);
+                        $"[Assigned] {tNo3}: {tSubj3}", html, "TicketAssigned", tId3, attachKeys3);
                 }
             }
             catch { }

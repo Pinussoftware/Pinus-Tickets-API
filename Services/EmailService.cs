@@ -8,13 +8,16 @@ namespace PinusTickets.Services;
 
 public class EmailService(IConfiguration cfg, IServiceScopeFactory scopeFactory, ILogger<EmailService> log)
 {
-    // ── Send one email — uses its own fresh DB scope, safe to call from background threads ──
+    private readonly string _uploadDir = cfg["UploadPath"] ?? "/opt/pinus-tickets/uploads";
+
+    // ── Send one email — with optional file attachments ──────────────────────
     public async Task SendAsync(string toEmail, string toName, string subject, string htmlBody,
-                                string eventType = "General", int? ticketId = null)
+                                string eventType = "General", int? ticketId = null,
+                                IEnumerable<string>? attachmentKeys = null)
     {
-        var smtpCfg = cfg.GetSection("Smtp");
+        var smtpCfg  = cfg.GetSection("Smtp");
         bool enabled = smtpCfg.GetValue<bool>("Enabled");
-        string status = "Pending";
+        string status    = "Pending";
         string? errorMsg = null;
 
         if (!enabled)
@@ -32,7 +35,42 @@ public class EmailService(IConfiguration cfg, IServiceScopeFactory scopeFactory,
                     smtpCfg["FromEmail"]!));
                 message.To.Add(new MailboxAddress(toName, toEmail));
                 message.Subject = subject;
-                message.Body    = new TextPart("html") { Text = htmlBody };
+
+                // ── Build multipart if there are attachments ──────────────────
+                var keys = attachmentKeys?.ToList() ?? [];
+                if (keys.Count > 0)
+                {
+                    var multipart = new Multipart("mixed");
+                    multipart.Add(new TextPart("html") { Text = htmlBody });
+
+                    foreach (var key in keys)
+                    {
+                        var filePath = Path.Combine(_uploadDir,
+                            key.Replace('/', Path.DirectorySeparatorChar));
+
+                        if (!File.Exists(filePath))
+                        {
+                            log.LogWarning("[EMAIL] Attachment not found: {Path}", filePath);
+                            continue;
+                        }
+
+                        var mimeType  = MimeTypes.GetMimeType(filePath);
+                        var contentType = ContentType.Parse(mimeType);
+                        var att = new MimePart(contentType.MediaType, contentType.MediaSubtype)
+                        {
+                            Content            = new MimeContent(File.OpenRead(filePath)),
+                            ContentDisposition = new ContentDisposition(ContentDisposition.Attachment),
+                            ContentTransferEncoding = ContentEncoding.Base64,
+                            FileName = Path.GetFileName(filePath)
+                        };
+                        multipart.Add(att);
+                    }
+                    message.Body = multipart;
+                }
+                else
+                {
+                    message.Body = new TextPart("html") { Text = htmlBody };
+                }
 
                 using var client = new SmtpClient();
                 await client.ConnectAsync(
@@ -46,7 +84,8 @@ public class EmailService(IConfiguration cfg, IServiceScopeFactory scopeFactory,
                 await client.DisconnectAsync(true);
 
                 status = "Sent";
-                log.LogInformation("[EMAIL SENT] To:{To} Subject:{Subject}", toEmail, subject);
+                log.LogInformation("[EMAIL SENT] To:{To} Subject:{Subject} Attachments:{Count}",
+                    toEmail, subject, keys.Count);
             }
             catch (Exception ex)
             {
@@ -87,6 +126,7 @@ public class EmailService(IConfiguration cfg, IServiceScopeFactory scopeFactory,
     <p><strong>Raised by:</strong> {creatorName}</p>
     <a href='{portalUrl}' class='btn'>View Ticket</a>
     <p class='footer-note'>Please review and assign this ticket at the earliest.</p>
+    <p class='footer-note'>📎 Attachments (if any) are included with this email.</p>
   </div>");
 
     public string TicketAssignedHtml(string ticketNo, string subject, string priority,
@@ -99,6 +139,7 @@ public class EmailService(IConfiguration cfg, IServiceScopeFactory scopeFactory,
     {TicketCard(ticketNo, subject, priority, customer)}
     <p><strong>SLA Due:</strong> {slaDue}</p>
     <a href='{portalUrl}' class='btn'>Open My Workbench</a>
+    <p class='footer-note'>📎 Ticket attachments (if any) are included with this email.</p>
   </div>");
 
     public string TicketStatusChangedHtml(string ticketNo, string subject,
