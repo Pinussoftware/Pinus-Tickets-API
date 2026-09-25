@@ -192,7 +192,9 @@ public class ContractsController(AppDbContext db) : ControllerBase
         var c = new Contract
         {
             CustomerId = req.CustomerId, ContractNumber = req.ContractNumber,
-            PlanName = req.PlanName, StartDate = req.StartDate, EndDate = req.EndDate,
+            PlanName = req.PlanName,
+            StartDate = DateTime.SpecifyKind(req.StartDate, DateTimeKind.Utc),
+            EndDate   = DateTime.SpecifyKind(req.EndDate,   DateTimeKind.Utc),
             Status = req.Status ?? "active",
             ResponseHoursCritical = req.ResponseHoursCritical,
             ResponseHoursHigh = req.ResponseHoursHigh,
@@ -212,7 +214,8 @@ public class ContractsController(AppDbContext db) : ControllerBase
         var c = await db.Contracts.Include(x => x.Customer).FirstOrDefaultAsync(x => x.Id == id);
         if (c == null) return NotFound();
         c.ContractNumber = req.ContractNumber; c.PlanName = req.PlanName;
-        c.StartDate = req.StartDate; c.EndDate = req.EndDate;
+        c.StartDate = DateTime.SpecifyKind(req.StartDate, DateTimeKind.Utc);
+        c.EndDate   = DateTime.SpecifyKind(req.EndDate,   DateTimeKind.Utc);
         c.Status = req.Status ?? c.Status;
         c.ResponseHoursCritical = req.ResponseHoursCritical;
         c.ResponseHoursHigh = req.ResponseHoursHigh;
