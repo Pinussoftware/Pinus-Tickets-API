@@ -10,6 +10,12 @@ AppContext.SetSwitch("Npgsql.EnableLegacyTimestampBehavior", true);
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Allow up to 20MB file uploads
+builder.Services.Configure<Microsoft.AspNetCore.Http.Features.FormOptions>(o => {
+    o.MultipartBodyLengthLimit = 20 * 1024 * 1024;
+});
+builder.WebHost.ConfigureKestrel(k => k.Limits.MaxRequestBodySize = 20 * 1024 * 1024);
+
 // ── Database ──────────────────────────────────────────────────────────────────
 builder.Services.AddDbContext<AppDbContext>(opt =>
     opt.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection"))
