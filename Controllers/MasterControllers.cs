@@ -43,9 +43,18 @@ public class CustomersController(AppDbContext db) : ControllerBase
         c.MaxTicketsPerMonth = req.MaxTicketsPerMonth; c.Notes = req.Notes;
     }
 
+    private bool  IsCustomerRole   => User.IsInRole("CustomerAdmin") || User.IsInRole("CustomerUser");
+    private int?  CurrentCustomerId => int.TryParse(User.FindFirst("customer_id")?.Value, out var cid) && cid > 0 ? cid : null;
+
     [HttpGet]
     public async Task<IActionResult> List()
-        => Ok(await db.Customers.Select(c => ToDto(c)).ToListAsync());
+    {
+        var q = db.Customers.AsQueryable();
+        // Customer roles see only their own customer record
+        if (IsCustomerRole && CurrentCustomerId.HasValue)
+            q = q.Where(c => c.Id == CurrentCustomerId.Value);
+        return Ok(await q.Select(c => ToDto(c)).ToListAsync());
+    }
 
     [HttpGet("{id:int}")]
     public async Task<IActionResult> Get(int id)
