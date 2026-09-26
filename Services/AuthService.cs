@@ -42,6 +42,7 @@ public class AuthService(AppDbContext db, IConfiguration cfg)
             new Claim(ClaimTypes.Name,               user.Name),
             new Claim(ClaimTypes.Role,               user.Role),
             new Claim("org_id",                      user.OrganizationId.ToString()),
+            new Claim("customer_id",                 user.CustomerId?.ToString() ?? ""),
         };
 
         var token = new JwtSecurityToken(

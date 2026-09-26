@@ -11,10 +11,11 @@ namespace PinusTickets.Controllers;
 [Authorize]
 public class TicketsController(TicketService svc) : ControllerBase
 {
-    private int    CurrentUserId  => int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
-    private string CurrentRole    => User.FindFirstValue(ClaimTypes.Role) ?? "";
-    private int    CurrentOrgId   => int.Parse(User.FindFirstValue("org_id") ?? "0");
-    private bool   IsCustomerRole => CurrentRole is "CustomerAdmin" or "CustomerUser";
+    private int    CurrentUserId   => int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+    private string CurrentRole     => User.FindFirstValue(ClaimTypes.Role) ?? "";
+    private int    CurrentOrgId    => int.Parse(User.FindFirstValue("org_id") ?? "0");
+    private int?   CurrentCustomerId => int.TryParse(User.FindFirstValue("customer_id"), out var cid) && cid > 0 ? cid : null;
+    private bool   IsCustomerRole  => CurrentRole is "CustomerAdmin" or "CustomerUser";
 
     // GET /api/v1/tickets
     [HttpGet]
@@ -22,8 +23,8 @@ public class TicketsController(TicketService svc) : ControllerBase
         [FromQuery] string? status, [FromQuery] string? priority,
         [FromQuery] int? customerId, [FromQuery] int? assigneeId)
     {
-        // Customer roles can ONLY see their own org's tickets
-        int? scopedCustomerId = IsCustomerRole ? CurrentOrgId : customerId;
+        // Customer roles: scope to their specific customer only
+        int? scopedCustomerId = IsCustomerRole ? CurrentCustomerId : customerId;
         return Ok(await svc.GetListAsync(status, priority, scopedCustomerId, assigneeId));
     }
 
@@ -35,7 +36,7 @@ public class TicketsController(TicketService svc) : ControllerBase
         {
             var ticket = await svc.GetDetailAsync(id);
             // Customer roles: block access to other customers' tickets
-            if (IsCustomerRole && ticket.CustomerId != CurrentOrgId)
+            if (IsCustomerRole && ticket.CustomerId != CurrentCustomerId)
                 return Forbid();
             return Ok(ticket);
         }

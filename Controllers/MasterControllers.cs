@@ -138,11 +138,16 @@ public class ApplicationsController(AppDbContext db) : ControllerBase
         a.SlaPriority = req.SlaPriority; a.Notes = req.Notes;
     }
 
+    private bool   IsCustomerRole  => User.IsInRole("CustomerAdmin") || User.IsInRole("CustomerUser");
+    private int?   CurrentCustomerId => int.TryParse(User.FindFirst("customer_id")?.Value, out var cid) && cid > 0 ? cid : null;
+
     [HttpGet]
     public async Task<IActionResult> List([FromQuery] int? customerId, [FromQuery] string? status)
     {
         var q = db.Applications.Include(a => a.Customer).AsQueryable();
-        if (customerId.HasValue) q = q.Where(a => a.CustomerId == customerId);
+        // Customer roles: force-scope to their own customer
+        var scopedId = IsCustomerRole ? CurrentCustomerId : customerId;
+        if (scopedId.HasValue) q = q.Where(a => a.CustomerId == scopedId);
         if (!string.IsNullOrEmpty(status)) q = q.Where(a => a.Status == status);
         return Ok(await q.OrderBy(a => a.Customer!.Name).ThenBy(a => a.Name)
             .Select(a => ToDto(a, a.Customer!.Name)).ToListAsync());
@@ -201,11 +206,15 @@ public class ContractsController(AppDbContext db) : ControllerBase
         c.Status, c.ResponseHoursCritical, c.ResponseHoursHigh,
         c.ResponseHoursMedium, c.ResponseHoursLow, c.CreatedAt);
 
+    private bool   IsCustomerRole  => User.IsInRole("CustomerAdmin") || User.IsInRole("CustomerUser");
+    private int?   CurrentCustomerId => int.TryParse(User.FindFirst("customer_id")?.Value, out var cid) && cid > 0 ? cid : null;
+
     [HttpGet]
     public async Task<IActionResult> List([FromQuery] int? customerId)
     {
         var q = db.Contracts.Include(c => c.Customer).AsQueryable();
-        if (customerId.HasValue) q = q.Where(c => c.CustomerId == customerId);
+        var scopedId = IsCustomerRole ? CurrentCustomerId : customerId;
+        if (scopedId.HasValue) q = q.Where(c => c.CustomerId == scopedId);
         return Ok(await q.OrderByDescending(c => c.CreatedAt).Select(c => ToDto(c)).ToListAsync());
     }
 
