@@ -82,6 +82,37 @@ public class CustomersController(AppDbContext db) : ControllerBase
             return StatusCode(500, new { message = ex.InnerException?.Message ?? ex.Message });
         }
     }
+
+    [HttpDelete("{id:int}")]
+    [Authorize(Roles = "Admin")]
+    public async Task<IActionResult> Delete(int id)
+    {
+        var c = await db.Customers.FindAsync(id);
+        if (c == null) return NotFound();
+        try
+        {
+            // Cascade: remove linked tickets (and their children) + contracts
+            var ticketIds = db.Tickets.Where(t => t.CustomerId == id).Select(t => t.Id).ToList();
+            if (ticketIds.Count > 0)
+            {
+                db.Notifications.RemoveRange(db.Notifications.Where(n => n.TicketId != null && ticketIds.Contains(n.TicketId!.Value)));
+                db.TicketHistory.RemoveRange(db.TicketHistory.Where(h => ticketIds.Contains(h.TicketId)));
+                db.TicketComments.RemoveRange(db.TicketComments.Where(h => ticketIds.Contains(h.TicketId)));
+                db.TicketAttachments.RemoveRange(db.TicketAttachments.Where(h => ticketIds.Contains(h.TicketId)));
+                db.TimeEntries.RemoveRange(db.TimeEntries.Where(h => ticketIds.Contains(h.TicketId)));
+                db.TestResults.RemoveRange(db.TestResults.Where(h => ticketIds.Contains(h.TicketId)));
+                db.Tickets.RemoveRange(db.Tickets.Where(t => ticketIds.Contains(t.Id)));
+            }
+            db.Contracts.RemoveRange(db.Contracts.Where(ct => ct.CustomerId == id));
+            db.Customers.Remove(c);
+            await db.SaveChangesAsync();
+            return NoContent();
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, new { message = ex.InnerException?.Message ?? ex.Message });
+        }
+    }
 }
 
 // ── Applications ──────────────────────────────────────────────────────────────
