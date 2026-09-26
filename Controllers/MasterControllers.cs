@@ -283,11 +283,16 @@ public class ContractsController(AppDbContext db) : ControllerBase
 [Authorize(Roles = "Admin")]
 public class UsersController(AppDbContext db) : ControllerBase
 {
-    private static UserDto ToDto(User u) => new(u.Id, u.Name, u.Email, u.Role, u.Status, u.Phone, u.CreatedAt);
+    private static object ToDto(User u) => new {
+        u.Id, u.Name, u.Email, u.Role, u.Status, u.Phone, u.CreatedAt, u.CustomerId
+    };
 
     [HttpGet]
     public async Task<IActionResult> List()
-        => Ok(await db.Users.Select(u => ToDto(u)).ToListAsync());
+        => Ok(await db.Users.Include(u => u.Customer).Select(u => new {
+            u.Id, u.Name, u.Email, u.Role, u.Status, u.Phone, u.CreatedAt, u.CustomerId,
+            CustomerName = u.Customer != null ? u.Customer.Name : null
+        }).ToListAsync());
 
     [HttpPost]
     public async Task<IActionResult> Create([FromBody] CreateUserRequest req)
@@ -314,6 +319,7 @@ public class UsersController(AppDbContext db) : ControllerBase
         u.Role  = req.Role  ?? u.Role;
         u.Phone = req.Phone ?? u.Phone;
         u.Status= req.Status?? u.Status;
+        if (req.CustomerId.HasValue) u.CustomerId = req.CustomerId == 0 ? null : req.CustomerId;
         if (!string.IsNullOrEmpty(req.Password))
             u.PasswordHash = BCrypt.Net.BCrypt.HashPassword(req.Password);
         await db.SaveChangesAsync();

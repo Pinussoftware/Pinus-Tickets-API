@@ -9,7 +9,7 @@ public record LoginResponse(int UserId, string Name, string Email, string Role,
 public record UserDto(int Id, string Name, string Email, string Role, string Status, string? Phone, DateTime? CreatedAt);
 public record CreateUserRequest(string Name, string Email, string Password,
                                 string Role, int OrganizationId, string? Phone);
-public record UpdateUserRequest(string? Name, string? Role, string? Phone, string? Status, string? Password);
+public record UpdateUserRequest(string? Name, string? Role, string? Phone, string? Status, string? Password, int? CustomerId);
 
 // ── Customers ────────────────────────────────────────────────────────────────
 public record CustomerDto(
