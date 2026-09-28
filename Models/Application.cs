@@ -17,6 +17,7 @@ public class Application
 
     // Extended fields
     [Column("description")]        public string? Description     { get; set; }
+    [Column("app_type")]           public string? AppType         { get; set; } = "Web";
     [Column("database_tech")]      public string? DatabaseTech    { get; set; }
     [Column("deployment_type")]    public string? DeploymentType  { get; set; }
     [Column("support_team")]       public string? SupportTeam     { get; set; }

@@ -133,7 +133,7 @@ public class ApplicationsController(AppDbContext db) : ControllerBase
     private static object ToDto(Application a, string? customerName = null) => new {
         a.Id, a.Name, a.Version, a.Technology, a.Status, a.CustomerId,
         CustomerName = customerName ?? a.Customer?.Name,
-        a.Description, a.DatabaseTech, a.DeploymentType,
+        a.Description, a.AppType, a.DatabaseTech, a.DeploymentType,
         a.SupportTeam, a.SlaPriority, a.Notes, a.OwnerUserId
     };
 
@@ -142,6 +142,7 @@ public class ApplicationsController(AppDbContext db) : ControllerBase
         a.Name = req.Name; a.CustomerId = req.CustomerId;
         a.Version = req.Version; a.Technology = req.Technology;
         a.Status = req.Status ?? a.Status;
+        a.AppType = req.AppType ?? a.AppType;
         a.Description = req.Description; a.DatabaseTech = req.DatabaseTech;
         a.DeploymentType = req.DeploymentType; a.SupportTeam = req.SupportTeam;
         a.SlaPriority = req.SlaPriority; a.Notes = req.Notes;

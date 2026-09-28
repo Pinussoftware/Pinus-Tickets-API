@@ -38,7 +38,7 @@ public record ApplicationDto(int Id, string Name, string? Version, string? Techn
     string? Description, string? DatabaseTech, string? DeploymentType,
     string? SupportTeam, string? SlaPriority, string? Notes);
 public record CreateApplicationRequest(string Name, int CustomerId,
-    string? Version, string? Technology, string? Status,
+    string? Version, string? Technology, string? Status, string? AppType,
     string? Description, string? DatabaseTech, string? DeploymentType,
     string? SupportTeam, string? SlaPriority, string? Notes);
 
