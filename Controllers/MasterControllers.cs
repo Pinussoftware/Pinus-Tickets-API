@@ -21,7 +21,8 @@ public class CustomersController(AppDbContext db) : ControllerBase
         c.BankName, c.BranchName, c.AccountName, c.AccountNumber,
         c.AccountType, c.IfscCode, c.SwiftCode, c.MicrCode, c.UpiId,
         c.SupportEmail, c.EscalationContact, c.Timezone,
-        c.BusinessHours, c.MaxTicketsPerMonth, c.Notes);
+        c.BusinessHours, c.MaxTicketsPerMonth, c.Notes,
+        c.NotifyEmails, c.NotifyOnCreate, c.NotifyOnStatus, c.NotifyOnAssign, c.NotifyOnResolve);
 
     private static void ApplyRequest(Customer c, CreateCustomerRequest req, bool isNew = false)
     {
@@ -31,7 +32,7 @@ public class CustomersController(AppDbContext db) : ControllerBase
         c.Industry = req.Industry; c.ContactPerson = req.ContactPerson;
         c.Phone = req.Phone; c.Email = req.Email; c.Website = req.Website;
         c.Gstin = req.Gstin; c.TaxNo = req.TaxNo; c.SlaPlan = req.SlaPlan;
-        c.Status = req.Status ?? c.Status; c.SinceYear = req.SinceYear;
+        c.SinceYear = req.SinceYear;
         c.Address = req.Address; c.City = req.City; c.State = req.State;
         c.Pincode = req.Pincode; c.Country = req.Country;
         c.BankName = req.BankName; c.BranchName = req.BranchName;
@@ -41,6 +42,11 @@ public class CustomersController(AppDbContext db) : ControllerBase
         c.SupportEmail = req.SupportEmail; c.EscalationContact = req.EscalationContact;
         c.Timezone = req.Timezone; c.BusinessHours = req.BusinessHours;
         c.MaxTicketsPerMonth = req.MaxTicketsPerMonth; c.Notes = req.Notes;
+        c.NotifyEmails     = req.NotifyEmails;
+        if (req.NotifyOnCreate  != null) c.NotifyOnCreate  = req.NotifyOnCreate.Value;
+        if (req.NotifyOnStatus  != null) c.NotifyOnStatus  = req.NotifyOnStatus.Value;
+        if (req.NotifyOnAssign  != null) c.NotifyOnAssign  = req.NotifyOnAssign.Value;
+        if (req.NotifyOnResolve != null) c.NotifyOnResolve = req.NotifyOnResolve.Value;
     }
 
     private bool  IsCustomerRole   => User.IsInRole("CustomerAdmin") || User.IsInRole("CustomerUser");

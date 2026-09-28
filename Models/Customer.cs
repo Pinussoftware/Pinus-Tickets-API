@@ -51,6 +51,13 @@ public class Customer
     [Column("max_tickets_per_month")]  public int?     MaxTicketsPerMonth{ get; set; }
     [Column("notes")]                  public string?  Notes           { get; set; }
 
+    // Email notification config
+    [Column("notify_emails")]          public string?  NotifyEmails    { get; set; } // comma-separated
+    [Column("notify_on_create")]       public bool     NotifyOnCreate  { get; set; } = true;
+    [Column("notify_on_status")]       public bool     NotifyOnStatus  { get; set; } = true;
+    [Column("notify_on_assign")]       public bool     NotifyOnAssign  { get; set; } = false;
+    [Column("notify_on_resolve")]      public bool     NotifyOnResolve { get; set; } = true;
+
     public Organization? Organization { get; set; }
     public ICollection<Application> Applications { get; set; } = [];
     public ICollection<Contract> Contracts { get; set; } = [];

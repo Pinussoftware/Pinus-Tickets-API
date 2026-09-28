@@ -20,17 +20,19 @@ public record CustomerDto(
     string? BankName, string? BranchName, string? AccountName, string? AccountNumber,
     string? AccountType, string? IfscCode, string? SwiftCode, string? MicrCode, string? UpiId,
     string? SupportEmail, string? EscalationContact, string? Timezone,
-    string? BusinessHours, int? MaxTicketsPerMonth, string? Notes);
+    string? BusinessHours, int? MaxTicketsPerMonth, string? Notes,
+    string? NotifyEmails, bool? NotifyOnCreate, bool? NotifyOnStatus, bool? NotifyOnAssign, bool? NotifyOnResolve);
 
 public record CreateCustomerRequest(
     string Name, string AccountCode, int OrganizationId,
     string? Industry, string? ContactPerson, string? Phone, string? Email, string? Website,
-    string? Gstin, string? TaxNo, string? SlaPlan, string? Status, string? SinceYear,
+    string? Gstin, string? TaxNo, string? SlaPlan, string? SinceYear,
     string? Address, string? City, string? State, string? Pincode, string? Country,
     string? BankName, string? BranchName, string? AccountName, string? AccountNumber,
     string? AccountType, string? IfscCode, string? SwiftCode, string? MicrCode, string? UpiId,
     string? SupportEmail, string? EscalationContact, string? Timezone,
-    string? BusinessHours, int? MaxTicketsPerMonth, string? Notes);
+    string? BusinessHours, int? MaxTicketsPerMonth, string? Notes,
+    string? NotifyEmails, bool? NotifyOnCreate, bool? NotifyOnStatus, bool? NotifyOnAssign, bool? NotifyOnResolve);
 
 // ── Applications ─────────────────────────────────────────────────────────────
 public record ApplicationDto(int Id, string Name, string? Version, string? Technology,
