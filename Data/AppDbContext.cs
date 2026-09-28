@@ -18,6 +18,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<TestResult>       TestResults       => Set<TestResult>();
     public DbSet<Notification>     Notifications     => Set<Notification>();
     public DbSet<RolePermission>   RolePermissions   => Set<RolePermission>();
+    public DbSet<Technology>       Technologies      => Set<Technology>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
