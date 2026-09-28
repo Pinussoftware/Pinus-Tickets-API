@@ -68,9 +68,11 @@ public class TicketService(AppDbContext db, EmailService email, IConfiguration c
             .Select(u => new { u.Email, u.Name }).ToListAsync();
 
         // Customer notify emails for ticket-created
-        var custNotifyCreate = (customer?.NotifyOnCreate == true && !string.IsNullOrWhiteSpace(customer.NotifyEmails))
-            ? customer.NotifyEmails.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            : [];
+        // Customer notify contacts from dedicated table
+        var allContacts = await db.CustomerNotifyContacts
+            .Where(c => c.CustomerId == req.CustomerId && c.IsActive)
+            .ToListAsync();
+        var custNotifyCreate = allContacts.Where(c => c.NotifyOnCreate).Select(c => new { c.Email, c.Name }).ToList();
 
         var ticketNo  = ticket.TicketNo;
         var subject2  = ticket.Subject;
@@ -110,9 +112,9 @@ public class TicketService(AppDbContext db, EmailService email, IConfiguration c
                     await email.SendAsync(creator.Email, creator.Name,
                         $"Your ticket {ticketNo} has been received",
                         html, "TicketCreated", ticketId, keys);
-                // Notify customer's configured emails
-                foreach (var custEmail in custNotifyCreate)
-                    await email.SendAsync(custEmail, custName,
+                // Notify customer's configured contacts
+                foreach (var c in custNotifyCreate)
+                    await email.SendAsync(c.Email, c.Name,
                         $"[Ticket Raised] {ticketNo}: {subject2}",
                         html, "TicketCreated", ticketId, keys);
             }
@@ -194,10 +196,12 @@ public class TicketService(AppDbContext db, EmailService email, IConfiguration c
         var tId2 = ticket.Id;
 
         // Customer notify emails for status events
-        var custNotifyStatus  = (customer2?.NotifyOnStatus  == true && !string.IsNullOrWhiteSpace(customer2.NotifyEmails))
-            ? customer2.NotifyEmails.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries) : [];
-        var custNotifyResolve = (customer2?.NotifyOnResolve == true && !string.IsNullOrWhiteSpace(customer2.NotifyEmails))
-            ? customer2.NotifyEmails.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries) : [];
+        // Customer notify contacts from dedicated table (for status/resolve)
+        var allContacts2 = await db.CustomerNotifyContacts
+            .Where(c => c.CustomerId == ticket.CustomerId && c.IsActive)
+            .ToListAsync();
+        var custNotifyStatus  = allContacts2.Where(c => c.NotifyOnStatus).Select(c => new { c.Email, c.Name }).ToList();
+        var custNotifyResolve = allContacts2.Where(c => c.NotifyOnResolve).Select(c => new { c.Email, c.Name }).ToList();
         var custName2 = customer2?.Name ?? "";
 
         _ = Task.Run(async () =>
@@ -212,7 +216,7 @@ public class TicketService(AppDbContext db, EmailService email, IConfiguration c
                     await email.SendAsync(creator2.Email, creator2.Name,
                         $"✅ Resolved: {tNo2} — {tSubj2}", html, "TicketResolved", tId2);
                     foreach (var ce in custNotifyResolve)
-                        await email.SendAsync(ce, custName2, $"✅ [Resolved] {tNo2}: {tSubj2}", html, "TicketResolved", tId2);
+                        await email.SendAsync(ce.Email, ce.Name, $"✅ [Resolved] {tNo2}: {tSubj2}", html, "TicketResolved", tId2);
                 }
                 else if (newS is "Closed" or "Reopened" or "Waiting for Customer")
                 {
@@ -222,7 +226,7 @@ public class TicketService(AppDbContext db, EmailService email, IConfiguration c
                         await email.SendAsync(creator2.Email, creator2.Name,
                             $"Ticket {tNo2} status: {newS}", html, "StatusChanged", tId2);
                     foreach (var ce in custNotifyStatus)
-                        await email.SendAsync(ce, custName2, $"[Status Update] {tNo2}: {newS}", html, "StatusChanged", tId2);
+                        await email.SendAsync(ce.Email, ce.Name, $"[Status Update] {tNo2}: {newS}", html, "StatusChanged", tId2);
                 }
             }
             catch { }
