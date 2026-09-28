@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -13,12 +14,15 @@ public class RolePermissionsController(AppDbContext db) : ControllerBase
 {
     static readonly string[] ValidRoles = ["SupportManager","SupportExecutive","CustomerAdmin","CustomerUser"];
 
-    // GET /api/v1/role-permissions/{role}
+    // GET /api/v1/role-permissions/{role}  — any authenticated user can read their own role
     [HttpGet("{role}")]
-    [Authorize(Roles = "Admin,SupportManager")]
     public IActionResult Get(string role)
     {
         if (!ValidRoles.Contains(role)) return BadRequest(new { message = "Invalid role" });
+        // Non-admins can only read their own role's permissions
+        var callerRole = User.FindFirstValue(ClaimTypes.Role) ?? "";
+        if (callerRole != "Admin" && callerRole != "SupportManager" && callerRole != role)
+            return Forbid();
         var perms = db.RolePermissions.Where(p => p.Role == role)
             .OrderBy(p => p.PageSection).ThenBy(p => p.PageLabel)
             .Select(p => new {
