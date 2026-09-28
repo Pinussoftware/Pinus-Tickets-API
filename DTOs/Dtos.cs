@@ -46,13 +46,15 @@ public record CreateApplicationRequest(string Name, int CustomerId,
 
 // ── Contracts ─────────────────────────────────────────────────────────────────
 public record ContractDto(int Id, int CustomerId, string CustomerName,
-    string ContractNumber, string PlanName, DateTime StartDate, DateTime EndDate,
-    string Status, int ResponseHoursCritical, int ResponseHoursHigh,
-    int ResponseHoursMedium, int ResponseHoursLow, DateTime? CreatedAt);
-public record CreateContractRequest(int CustomerId, string ContractNumber,
-    string PlanName, DateTime StartDate, DateTime EndDate, string? Status,
+    string ContractNumber, string PlanName, DateTime StartDate, DateTime EndDate, string Status,
     int ResponseHoursCritical, int ResponseHoursHigh,
-    int ResponseHoursMedium, int ResponseHoursLow);
+    int ResponseHoursMedium, int ResponseHoursLow,
+    string BusinessHours, string SupportWindow, DateTime? CreatedAt);
+public record CreateContractRequest(int CustomerId, string ContractNumber,
+    string PlanName, DateTime StartDate, DateTime EndDate, string Status,
+    int ResponseHoursCritical, int ResponseHoursHigh,
+    int ResponseHoursMedium, int ResponseHoursLow,
+    string? BusinessHours, string? SupportWindow);
 
 // ── Tickets ──────────────────────────────────────────────────────────────────
 public record TicketListItem(int Id, string TicketNo, string Subject,

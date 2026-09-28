@@ -16,7 +16,9 @@ public class Contract
     [Column("response_hours_critical")] public int ResponseHoursCritical { get; set; } = 2;
     [Column("response_hours_high")] public int ResponseHoursHigh { get; set; } = 4;
     [Column("response_hours_medium")] public int ResponseHoursMedium { get; set; } = 8;
-    [Column("response_hours_low")] public int ResponseHoursLow { get; set; } = 24;
+    [Column("response_hours_low")]      public int ResponseHoursLow      { get; set; } = 24;
+    [Column("business_hours")]          public string BusinessHours      { get; set; } = "9 AM – 6 PM (Mon–Fri)";
+    [Column("support_window")]          public string SupportWindow      { get; set; } = "24x5";
     [Column("created_at")] public DateTime? CreatedAt { get; set; } = DateTime.UtcNow;
 
     public Customer? Customer { get; set; }

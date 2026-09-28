@@ -220,7 +220,8 @@ public class ContractsController(AppDbContext db) : ControllerBase
         c.Id, c.CustomerId, c.Customer?.Name ?? "",
         c.ContractNumber, c.PlanName, c.StartDate, c.EndDate,
         c.Status, c.ResponseHoursCritical, c.ResponseHoursHigh,
-        c.ResponseHoursMedium, c.ResponseHoursLow, c.CreatedAt);
+        c.ResponseHoursMedium, c.ResponseHoursLow,
+        c.BusinessHours, c.SupportWindow, c.CreatedAt);
 
     private bool   IsCustomerRole  => User.IsInRole("CustomerAdmin") || User.IsInRole("CustomerUser");
     private int?   CurrentCustomerId => int.TryParse(User.FindFirst("customer_id")?.Value, out var cid) && cid > 0 ? cid : null;
@@ -256,6 +257,8 @@ public class ContractsController(AppDbContext db) : ControllerBase
             ResponseHoursHigh = req.ResponseHoursHigh,
             ResponseHoursMedium = req.ResponseHoursMedium,
             ResponseHoursLow = req.ResponseHoursLow,
+            BusinessHours  = req.BusinessHours  ?? "9 AM – 6 PM (Mon–Fri)",
+            SupportWindow  = req.SupportWindow  ?? "24x5",
         };
         db.Contracts.Add(c);
         await db.SaveChangesAsync();
@@ -277,6 +280,8 @@ public class ContractsController(AppDbContext db) : ControllerBase
         c.ResponseHoursHigh = req.ResponseHoursHigh;
         c.ResponseHoursMedium = req.ResponseHoursMedium;
         c.ResponseHoursLow = req.ResponseHoursLow;
+        if (req.BusinessHours != null) c.BusinessHours = req.BusinessHours;
+        if (req.SupportWindow != null) c.SupportWindow = req.SupportWindow;
         await db.SaveChangesAsync();
         return Ok(ToDto(c));
     }
