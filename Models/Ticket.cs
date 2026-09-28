@@ -13,6 +13,7 @@ public class Ticket
     [Column("type")] public string Type { get; set; } = "Bug";            // Bug, Feature, Support, Change
     [Column("category")] public string? Category { get; set; }
     [Column("priority")] public string Priority { get; set; } = "Medium"; // Critical, High, Medium, Low
+    [Column("severity")] public string Severity { get; set; } = "Medium"; // Critical, Major, Medium, Minor
     [Column("status")] public string Status { get; set; } = "New";        // Workflow states
     [Column("subject")] public string Subject { get; set; } = "";
     [Column("description")] public string Description { get; set; } = "";

@@ -46,6 +46,7 @@ public class TicketService(AppDbContext db, EmailService email, IConfiguration c
             Type             = req.Type,
             Category         = req.Category,
             Priority         = req.Priority,
+            Severity         = req.Severity ?? "Medium",
             Status           = "New",
             Subject          = req.Subject,
             Description      = req.Description,
@@ -144,7 +145,7 @@ public class TicketService(AppDbContext db, EmailService email, IConfiguration c
                 t.Id, t.TicketNo, t.Subject,
                 t.Customer!.Name,
                 t.Application != null ? t.Application.Name : null,
-                t.Type, t.Priority, t.Status,
+                t.Type, t.Priority, t.Severity, t.Status,
                 t.Assignee != null ? t.Assignee.Name : null,
                 t.SlaDueAt, t.UpdatedAt))
             .ToListAsync();
@@ -410,7 +411,7 @@ public class TicketService(AppDbContext db, EmailService email, IConfiguration c
     }
 
     private static TicketDetailDto MapDetail(Ticket t) => new(
-        t.Id, t.TicketNo, t.Subject, t.Type, t.Category, t.Priority, t.Status,
+        t.Id, t.TicketNo, t.Subject, t.Type, t.Category, t.Priority, t.Severity, t.Status,
         t.Description, t.ReproductionSteps, t.ExpectedResult, t.ActualResult,
         t.CustomerId,  t.Customer?.Name  ?? "",
         t.ApplicationId, t.Application?.Name,

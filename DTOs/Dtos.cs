@@ -59,12 +59,12 @@ public record CreateContractRequest(int CustomerId, string ContractNumber,
 // ── Tickets ──────────────────────────────────────────────────────────────────
 public record TicketListItem(int Id, string TicketNo, string Subject,
                              string CustomerName, string? ApplicationName,
-                             string Type, string Priority, string Status,
+                             string Type, string Priority, string Severity, string Status,
                              string? AssigneeName, DateTime? SlaDueAt,
                              DateTime? UpdatedAt);
 
 public record TicketDetailDto(int Id, string TicketNo, string Subject,
-    string Type, string? Category, string Priority, string Status,
+    string Type, string? Category, string Priority, string Severity, string Status,
     string Description, string? ReproductionSteps,
     string? ExpectedResult, string? ActualResult,
     int CustomerId, string CustomerName,
@@ -80,7 +80,8 @@ public record CreateTicketRequest(
     string Subject, string Description, string Type, string Priority,
     int CustomerId, int? ApplicationId,
     string? Category, string? ReproductionSteps,
-    string? ExpectedResult, string? ActualResult);
+    string? ExpectedResult, string? ActualResult,
+    string? Severity);
 
 public record TransitionRequest(string NewStatus, string? Reason);
 public record AssignRequest(int AssigneeId, string? Note);
