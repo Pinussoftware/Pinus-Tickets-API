@@ -214,14 +214,17 @@ public class TicketService(AppDbContext db, EmailService email, IConfiguration c
     public async Task<TicketDetailDto> AssignAsync(int id, AssignRequest req, int actorId)
     {
         var ticket = await db.Tickets.FindAsync(id) ?? throw new KeyNotFoundException();
-        var oldAssignee = ticket.AssigneeId?.ToString() ?? "unassigned";
+        var oldAssignee = ticket.AssigneeId.HasValue
+            ? (await db.Users.FindAsync(ticket.AssigneeId))?.Name ?? ticket.AssigneeId.ToString()
+            : "Unassigned";
         ticket.AssigneeId = req.AssigneeId;
         ticket.UpdatedAt  = DateTime.UtcNow;
         if (ticket.Status == "New" || ticket.Status == "Under Review")
             ticket.Status = "Assigned";
 
+        var newAssigneeName = (await db.Users.FindAsync(req.AssigneeId))?.Name ?? req.AssigneeId.ToString();
         await AddHistoryAsync(id, actorId, "assigned", "assignee_id",
-                              oldAssignee, req.AssigneeId.ToString(), req.Note);
+                              oldAssignee, newAssigneeName, req.Note);
         await db.SaveChangesAsync();
 
         // ── Pre-fetch before background task ──────────────────────────────────

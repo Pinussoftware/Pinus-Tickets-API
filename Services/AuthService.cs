@@ -15,7 +15,7 @@ public class AuthService(AppDbContext db, IConfiguration cfg)
     {
         var user = await db.Users
             .Include(u => u.Organization)
-            .FirstOrDefaultAsync(u => u.Email == req.Email && u.Status == "active");
+            .FirstOrDefaultAsync(u => u.Email.ToLower() == req.Email.ToLower() && u.Status == "active");
 
         if (user == null || !BCrypt.Net.BCrypt.Verify(req.Password, user.PasswordHash))
             return null;
