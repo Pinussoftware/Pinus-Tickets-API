@@ -23,16 +23,30 @@ public class TicketService(AppDbContext db, EmailService email, IConfiguration c
     };
 
     // ── Generate ticket number ───────────────────────────────────────────────
-    public async Task<string> NextTicketNoAsync()
+    private static string TypePrefix(string type) => type switch
     {
-        var prefix = $"TKT-{DateTime.UtcNow:yyyyMMdd}-";
-        var last   = await db.Tickets
-            .Where(t => t.TicketNo.StartsWith(prefix))
-            .OrderByDescending(t => t.TicketNo)
-            .Select(t => t.TicketNo)
+        "Incident"    => "INC",
+        "Task"        => "TAS",
+        "Enhancement" => "ENH",
+        "Defect"      => "DEF",
+        _             => "TKT"
+    };
+
+    public async Task<string> NextTicketNoAsync(string type)
+    {
+        var prefix = TypePrefix(type);
+
+        // Atomic increment using raw SQL to avoid race conditions
+        await db.Database.ExecuteSqlRawAsync(
+            "INSERT INTO ticket_sequences (type, last_no) VALUES ({0}, 1) ON CONFLICT (type) DO UPDATE SET last_no = ticket_sequences.last_no + 1",
+            type);
+
+        var seq = await db.TicketSequences
+            .Where(s => s.Type == type)
+            .Select(s => s.LastNo)
             .FirstOrDefaultAsync();
-        var seq = last == null ? 1 : int.Parse(last[^4..]) + 1;
-        return $"{prefix}{seq:D4}";
+
+        return $"{prefix}-{seq:D6}";
     }
 
     // ── Create ───────────────────────────────────────────────────────────────
@@ -40,7 +54,7 @@ public class TicketService(AppDbContext db, EmailService email, IConfiguration c
     {
         var ticket = new Ticket
         {
-            TicketNo         = await NextTicketNoAsync(),
+            TicketNo         = await NextTicketNoAsync(req.Type),
             CustomerId       = req.CustomerId,
             ApplicationId    = req.ApplicationId,
             Type             = req.Type,

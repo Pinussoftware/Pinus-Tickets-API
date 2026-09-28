@@ -21,6 +21,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<Technology>       Technologies      => Set<Technology>();
     public DbSet<Models.Environment> Environments    => Set<Models.Environment>();
     public DbSet<CustomerNotifyContact> CustomerNotifyContacts => Set<CustomerNotifyContact>();
+    public DbSet<TicketSequence>        TicketSequences        => Set<TicketSequence>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
